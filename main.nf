@@ -32,20 +32,12 @@
  */
 
 // input sequences to align in fasta format
-
 params.seqs = "$baseDir/data/*.fa"
-
 params.refs = "$baseDir/data/*.ref"
 
 // input guide trees in Newick format. Or `false` to generate trees
 //params.trees = "/users/cn/egarriga/datasets/homfam/trees/*.{FAMSA,CLUSTALO,CLUSTALO-RANDOM,MAFFT_PARTTREE}.dnd"
-params.trees = false
-
-// which alignment methods to run
-params.align_method = "FAMSA"
-
-// which tree methods to run if `trees` == `false`
-params.tree_method = "FAMSA"
+params.trees =""
 
 // generate regressive alignments ?
 params.regressive_align = true
@@ -53,29 +45,27 @@ params.regressive_align = true
 // create progressive alignments ?
 params.progressive_align = true
 
-// create default alignments ? 
-params.default_align = false
-
 // evaluate alignments ?
 params.evaluate = true
+
+//aligner and tree generation
+tree_method = "FAMSA"
+align_method = "FAMSA"
 
 // bucket sizes for regressive algorithm
 params.buckets= '1000'
 
 // output directory
-params.output = "$baseDir/resultsPROGRESSIVE"
-
+params.output = "$baseDir/results"
 
 log.info """\
-         R E G R E S S I V E   M S A   A n a l y s i s  ~  version 0.1"
+         F  A  M  S  A    P  i  p  e  l  i  n  e  ~  version 0.1"
          ======================================="
          Input sequences (FASTA)                        : ${params.seqs}
          Input references (Aligned FASTA)               : ${params.refs}
          Input trees (NEWICK)                           : ${params.trees}
-         Output directory (DIRECTORY)                   : ${params.output}
-         Alignment methods                              : ${params.align_method}
-         Tree methods                                   : ${params.tree_method}
-         Generate default alignments                    : ${params.default_align}
+         Alignment methods                              : ${align_method}
+         Tree methods                                   : ${tree_method}
          Generate progressive alignments                : ${params.progressive_align}
          Generate regressive alignments (DPA)           : ${params.regressive_align}
          Bucket Sizes for regressive alignments         : ${params.buckets}
@@ -90,7 +80,6 @@ if ( params.seqs ) {
   Channel
   .fromPath(params.seqs)
   .map { item -> [ item.baseName, item] }
-  //.view()
   .into { seqsCh; seqs2 }
 }
 
@@ -114,10 +103,6 @@ else {
     .set { trees }
 }
 
-tree_methods = params.tree_method
-align_methods = params.align_method
-
-
 /*
  * GENERATE GUIDE TREES USING MEHTODS DEFINED WITH "--tree_method"
  *
@@ -126,7 +111,6 @@ align_methods = params.align_method
  */
 
 process generate_trees {
-
     tag "${id}.${tree_method}"
     publishDir "${params.output}/guide_trees", mode: 'copy', overwrite: true
    
@@ -134,7 +118,6 @@ process generate_trees {
     set val(id), \
          file(seqs) \
          from seqsCh
-     each tree_method from tree_methods.tokenize(',') 
 
    output:
      set val(id), \
@@ -151,15 +134,13 @@ process generate_trees {
    """
 }
 
-
 treesGenerated
   .mix ( trees )
   .combine ( seqs2, by:0 )
-  .into { seqsAndTreesForStandardAlignment; seqsAndTreesForRegressiveAlignment; seqsAndTreesForProgressiveAlignment }
+  .into {seqsAndTreesForRegressiveAlignment; seqsAndTreesForProgressiveAlignment }
 
 
 process regressive_alignment {
-
     tag "${id}"
     publishDir "${params.output}/alignments", mode: 'copy', overwrite: true
 
@@ -171,8 +152,6 @@ process regressive_alignment {
         from seqsAndTreesForRegressiveAlignment
 
       each bucket_size from params.buckets.tokenize(',')
-
-      each align_method from align_methods.tokenize(',')
 
     when:
       params.regressive_align
@@ -198,7 +177,6 @@ process regressive_alignment {
 }
 
 process progressive_alignment {
-
     tag "${id}"
     publishDir "${params.output}/alignments", mode: 'copy', overwrite: true
 
@@ -208,8 +186,6 @@ process progressive_alignment {
         file(guide_tree), \
         file(seqs) \
         from seqsAndTreesForProgressiveAlignment
-
-    each align_method from align_methods.tokenize(',')
 
     when:
       params.progressive_align
@@ -238,8 +214,7 @@ refs
   .map { it -> [it[0][0], it[1][1], it[1][2], it[1][3], it[1][4], it[1][5], it[0][1]] }
   .set { toEvaluate }
 
-process evaluate {
-    
+process evaluation {
     tag "${id}.${align_method}.${tree_method}.${align_type}.${bucket_size}"
     publishDir "${params.output}/individual_scores", mode: 'copy', overwrite: true
 
@@ -299,3 +274,4 @@ process evaluate {
 workflow.onComplete {
   println "Execution status: ${ workflow.success ? 'OK' : 'failed' } runName: ${workflow.runName}"
 }
+
