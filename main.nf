@@ -43,10 +43,12 @@ params.trees =""
 params.regressive_align = true
 
 // create progressive alignments ?
-params.progressive_align = true
+params.progressive_align = false
 
 // evaluate alignments ?
 params.evaluate = true
+
+params.homoplasy = false
 
 //aligner and tree generation
 tree_method = "FAMSA"
@@ -70,6 +72,7 @@ log.info """\
          Generate regressive alignments (DPA)           : ${params.regressive_align}
          Bucket Sizes for regressive alignments         : ${params.buckets}
          Perform evaluation? Requires reference         : ${params.evaluate}
+         Capture Homoplasy metrics?                     : ${params.homoplasy}
          Output directory (DIRECTORY)                   : ${params.output}
          """
          .stripIndent()
@@ -142,7 +145,8 @@ treesGenerated
 
 process regressive_alignment {
     tag "${id}"
-    publishDir "${params.output}/alignments", mode: 'copy', overwrite: true
+    publishDir "${params.output}/alignments", pattern: '*.aln', mode: 'copy', overwrite: true
+    publishDir "${params.output}/homoplasy", pattern: '*.{homo,w_homo,w_homo2,len,ngap,ngap2}', mode: 'copy', overwrite: true
 
     input:
         set val(id), \
@@ -165,6 +169,14 @@ process regressive_alignment {
         file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.aln") \
         into regressiveOut
 
+      set file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.homo"), \
+        file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.w_homo"), \
+        file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.w_homo2"), \
+        file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.len"), \
+        file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.ngap"), \
+        file("${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.ngap2") \
+        optional true into homoplasyOut
+
     script:
     """
         t_coffee -reg -reg_method famsa_msa \
@@ -173,6 +185,20 @@ process regressive_alignment {
          -reg_nseq ${bucket_size} \
          -reg_homoplasy \
          -outfile ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.aln
+
+          ## homo
+          awk 'NR == 1 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.homo
+          ## w_homo
+          awk 'NR == 2 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.w_homo
+          ## w_homo2
+          awk 'NR == 3 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.w_homo2
+          ## len
+          awk 'NR == 4 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.len
+          ## ngap
+          awk 'NR == 5 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.ngap
+          ## ngap2
+          awk 'NR == 6 {print \$2}' ${id}.homoplasy > ${id}.reg_align.${bucket_size}.${align_method}.with.${tree_method}.tree.ngap2
+        
     """
 }
 
